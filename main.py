@@ -41,7 +41,10 @@ class FileManager:
     async def move_file_suffix_dest(self,source_file: str, semaphore: asyncio.Semaphore,) -> bool:
         try:
             async with semaphore:
-                suffix =source_file.split(".")[-1]
+                if source_file.count(".") == 1:
+                   suffix =source_file.split(".")[-1]
+                else:
+                   suffix = "other"
                 dest_path = os.path.join(self.destination,suffix)
                 if not os.path.exists(dest_path):
                     os.makedirs(dest_path)
