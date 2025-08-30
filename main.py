@@ -56,7 +56,24 @@ class FileManager:
             print(f"Cancelled moving {source_file}")
             return False
 
+    def remove_folder_source(self):
 
+        try:
+            for root, dirs, files in os.walk(self.source, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+                for name in dirs:
+                    os.rmdir(os.path.join(root, name))
+            print(f"Removed source folder {self.source}")
+        except FileNotFoundError:
+            print(f"Source folder {self.source} does not exist")
+        except PermissionError:
+            print(f"Permission denied when trying to remove {self.source}")
+        except OSError as e:
+            print(f"Error removing source folder {self.source}: {str(e)}")
+        
+            
+        
 
 
 async def start(source_path: str, dest_path: str, file_type: list[str]) -> None:
@@ -68,7 +85,8 @@ async def start(source_path: str, dest_path: str, file_type: list[str]) -> None:
         print("All files moved.")
     else:
         print("Some files could not be moved.")
-
+    if file_type is None:
+         file_manager.remove_folder_source()
 
 
 
