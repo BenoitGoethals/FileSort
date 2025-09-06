@@ -2,54 +2,58 @@ import asyncio
 
 import argparse
 import os
+from pathlib import Path
 import shutil
 
 CPU_WORKERS = os.cpu_count()
 
 class FileManager:
     def __init__(self, source: str, destination: str, file_types: list[str]) -> None:
-        self.source = source
-        self.destination = destination
+        self.source = Path(source)
+        self.destination = Path(destination)
         self.file_types = file_types
 
     async def move_files(self) -> bool:
-        if not os.path.exists(self.destination):
-            os.makedirs(self.destination)
+        if not self.destination.exists():
+            self.destination.mkdir(parents=True, exist_ok=True)
         dl_semaphore = asyncio.Semaphore()
         source_files = []
-        for root, _, files in os.walk(self.source):
-            for file in files:
-                if self.file_types is not None:
-                     for type_file in self.file_types:
-                        if file.endswith(type_file):
-                            source_file = os.path.join(root, file)
-                            source_files.append(source_file)
+        if self.file_types is not None:
+            wanted = {t.lower().lstrip(".") for t in self.file_types}
+        else:
+            wanted = None
+
+        for path in self.source.rglob("*"):
+            if path.is_file():
+                if wanted is None:
+                    source_files.append(path)
                 else:
-                    source_file = os.path.join(root, file)
-                    source_files.append(source_file)
+                    ext = path.suffix.lower().lstrip(".")
+                    if ext in wanted:
+                        source_files.append(path)
+
         async with asyncio.TaskGroup() as tg:
             tasks = [
                 tg.create_task(
                     self.move_file_suffix_dest(file, dl_semaphore)
                 )
-                for file_nr,file in enumerate(source_files, start=1)
+                for file_nr, file in enumerate(source_files, start=1)
             ]
 
         return any([task.result() for task in tasks])
 
-
-    async def move_file_suffix_dest(self,source_file: str, semaphore: asyncio.Semaphore,) -> bool:
+    async def move_file_suffix_dest(self, source_file: Path, semaphore: asyncio.Semaphore,) -> bool:
         try:
             async with semaphore:
-                if source_file.count(".") == 1:
-                   suffix =source_file.split(".")[-1]
+                if len(source_file.suffixes) == 1 and source_file.suffix:
+                    suffix = source_file.suffix.lstrip(".")
                 else:
-                   suffix = "other"
-                dest_path = os.path.join(self.destination,suffix)
-                if not os.path.exists(dest_path):
-                    os.makedirs(dest_path)
-                destination_file = os.path.join(self.destination,suffix, os.path.basename(source_file),)
-                shutil.move(source_file, destination_file)
+                    suffix = "other"
+                dest_path = self.destination / suffix
+                if not dest_path.exists():
+                    dest_path.mkdir(parents=True, exist_ok=True)
+                destination_file = dest_path / source_file.name
+                shutil.move(str(source_file), str(destination_file))
                 print(f"Moved {source_file} to {destination_file}")
                 return True
         except asyncio.CancelledError:
@@ -57,13 +61,8 @@ class FileManager:
             return False
 
     def remove_folder_source(self):
-
         try:
-            for root, dirs, files in os.walk(self.source, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
+            shutil.rmtree(self.source)
             print(f"Removed source folder {self.source}")
         except FileNotFoundError:
             print(f"Source folder {self.source} does not exist")
@@ -71,9 +70,6 @@ class FileManager:
             print(f"Permission denied when trying to remove {self.source}")
         except OSError as e:
             print(f"Error removing source folder {self.source}: {str(e)}")
-        
-            
-        
 
 
 async def start(source_path: str, dest_path: str, file_type: list[str]) -> None:
@@ -86,7 +82,7 @@ async def start(source_path: str, dest_path: str, file_type: list[str]) -> None:
     else:
         print("Some files could not be moved.")
     if file_type is None:
-         file_manager.remove_folder_source()
+        file_manager.remove_folder_source()
 
 
 
